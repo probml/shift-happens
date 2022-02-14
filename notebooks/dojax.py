@@ -16,6 +16,27 @@ def rotation_matrix(angle):
     return R
 
 
+  def flat_and_concat_params(params_hist):
+    """
+    Flat and concat a list of parameters trained using
+    a Flax model
+    
+    
+    Parameters
+    ----------
+    params_hist: list of flax FrozenDicts
+        List of flax FrozenDicts containing trained model
+        weights.
+    
+    Returns
+    -------
+    jnp.array: flattened and concatenated weights
+    """
+    flat_params = [jax.flatten_util.ravel_pytree(params)[0] for params in params_hist]
+    flat_params  = jnp.r_[flat_params]
+    return flat_params
+
+
 def make_mse_func(model, x_batched, y_batched):
   def mse(params):
     # Define the squared loss for a single pair (x,y)
@@ -26,4 +47,3 @@ def make_mse_func(model, x_batched, y_batched):
     # We vectorize the previous to compute the average of the loss on all samples.
     return jnp.mean(jax.vmap(squared_error)(x_batched, y_batched), axis=0)
   return jax.jit(mse)
-
