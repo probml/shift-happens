@@ -34,9 +34,10 @@ def flat_and_concat_params(params_hist):
   -------
   jnp.array: flattened and concatenated weights
   """
+  _, recontruct_pytree_fn = jax.flatten_util.ravel_pytree(params_hist[0])
   flat_params = [jax.flatten_util.ravel_pytree(params)[0] for params in params_hist]
   flat_params  = jnp.r_[flat_params]
-  return flat_params
+  return flat_params, recontruct_pytree_fn
 
 
 def make_mse_func(model, x_batched, y_batched):
@@ -91,7 +92,7 @@ def blur_multiple(radii, img_dataset):
     for radius, img in zip(radii, img_dataset):
         img_proc = BlurRad(radius).blur(img)
         imgs_out.append(img_proc)
-    imgs_out = jnp.stack(imgs_out, axis=0)
+    imgs_out = np.stack(imgs_out, axis=0)
     
     return imgs_out
 
@@ -118,5 +119,7 @@ def proc_dataset_multiple(radii, img_dataset, n_processes=90):
         elements = zip(radii_split, dataset_proc)
         dataset_proc = pool.starmap(blur_multiple, elements)
         dataset_proc = np.concatenate(dataset_proc, axis=0)
+    pool.terminate()
+    pool.join()
 
     return dataset_proc
