@@ -97,6 +97,32 @@ def blur_multiple(radii, img_dataset):
     return imgs_out
 
 
+# To-do: Modify proc_dataset and proc_dataset_multiple to use
+# a function that modifies the image.
+
+def proc_dataset(radius, img_dataset, n_processes=90):
+    """
+    Blur all images of a dataset stored in a numpy array.
+    
+    Parameters
+    ----------
+    radius: float
+        Intensity of bluriness
+    img_dataset: array(N, L, K)
+        N images of size LxK
+    n_processes: int
+        Number of processes to blur over
+    """
+    with Pool(processes=n_processes) as pool:
+        dataset_proc = np.array_split(img_dataset, n_processes)
+        dataset_proc = pool.map(BlurRad(radius), dataset_proc)
+        dataset_proc = np.concatenate(dataset_proc, axis=0)
+    pool.terminate()
+    pool.join()
+    
+    return dataset_proc
+
+
 def proc_dataset_multiple(radii, img_dataset, n_processes=90):
     """
     Blur all images of a dataset stored in a numpy array with variable
@@ -104,14 +130,18 @@ def proc_dataset_multiple(radii, img_dataset, n_processes=90):
     
     Parameters
     ----------
-    radius: array(N,)
-        Intensity of bluriness. One per dataset
+    radius: array(N,) or float
+        Intensity of bluriness. One per image. If
+        float, the same value is used for all images.
     img_dataset: array(N, L, K)
         N images of size LxK
     n_processes: int
         Number of processes to blur over
     """
 
+    if type(radii) in [float, np.float_]:
+        radii = radii * np.ones(len(img_dataset))
+    
     with Pool(processes=n_processes) as pool:
         dataset_proc = np.array_split(img_dataset, n_processes)
         radii_split = np.array_split(radii, n_processes)
