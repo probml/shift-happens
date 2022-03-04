@@ -1,6 +1,7 @@
 import jax
 import optax
 import jax.numpy as jnp
+from functools import partial
 
 
 def make_loss_func(model, X, y):
@@ -12,12 +13,13 @@ def make_loss_func(model, X, y):
 
 
 class TrainingConfig:
-    def __init__(self, model, processor, loss_generator):
+    def __init__(self, model, processor, loss_generator, tx):
         self.model = model
         self.processor = processor
         self.loss_generator = loss_generator
+        self.tx = tx
 
-    def train_model_config(self, key, X_train, y_train, config, tx, num_epochs):
+    def train_model_config(self, key, X_train, y_train, config, num_epochs, batch_size):
 
         """
         Train a flax.linen model by transforming the data according to
@@ -38,8 +40,6 @@ class TrainingConfig:
         config: dict
             Dictionary containing the training configuration to be passed to
             the processor.
-        tx: optax optimizer
-            Optimizer for training the model.
         num_epochs: int
             Number of epochs to train the model.
         """
@@ -48,7 +48,7 @@ class TrainingConfig:
 
         batch = jnp.ones((1, *input_shape))
         params = self.model.init(key, batch)
-        optimiser_state = tx.init(params)
+        optimiser_state = self.tx.init(params)
 
         for e in range(num_epochs):
             print(f"@epoch {e+1:03}", end="\r")
@@ -56,17 +56,16 @@ class TrainingConfig:
             params, opt_state = self.train_epoch(key, params, optimiser_state,
                                                  X_train_proc, y_train, batch_size, e)
 
-        final_train_acc = (y_train == self.model.apply(params, X_train_ravel).argmax(axis=1)).mean().item()
-        print(f"@{radius=:0.4f}, {final_train_acc=:0.4f}")
+        final_train_acc = (y_train.argmax(axis=1) == self.model.apply(params, X_train_proc).argmax(axis=1)).mean().item()
         
         return params, final_train_acc
 
-    @jax.jit
-    def train_step(params, opt_state, X_batch, y_batch):
+    @partial(jax.jit, static_argnums=(0,))
+    def train_step(self, params, opt_state, X_batch, y_batch):
         loss_fn = self.loss_generator(self.model, X_batch, y_batch)
         loss_grad_fn = jax.value_and_grad(loss_fn)
         loss_val, grads = loss_grad_fn(params)
-        updates, opt_state = tx.update(grads, opt_state)
+        updates, opt_state = self.tx.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
 
         return loss_val, params
