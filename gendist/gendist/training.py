@@ -16,43 +16,9 @@ class TrainingConfig:
         self.model = model
         self.processor = processor
         self.loss_generator = loss_generator
-    
-    @jax.jit
-    def train_step(params, opt_state, X_batch, y_batch):
-        loss_fn = self.loss_generator(self.model, X_batch, y_batch)
-        loss_grad_fn = jax.value_and_grad(loss_fn)
-        loss_val, grads = loss_grad_fn(params)
-        updates, opt_state = tx.update(grads, opt_state)
-        params = optax.apply_updates(params, updates)
-
-        return loss_val, params
-
-    def get_batch_train_ixs(self, key, num_samples, batch_size):
-        """
-        Obtain the training indices to be used in an epoch of
-        mini-batch optimisation.
-        """
-        steps_per_epoch = num_samples // batch_size
-        batch_ixs = jax.random.permutation(key, num_samples)
-        batch_ixs = batch_ixs[:steps_per_epoch * batch_size]
-        batch_ixs = batch_ixs.reshape(steps_per_epoch, batch_size)
-        
-        return batch_ixs
-
-
-    def train_epoch(self, key, params, opt_step, X, y, batch_size, epoch):
-        num_samples, *_ = X.shape
-        batch_ixs = self.get_batch_train_ixs(key, num_samples, batch_size)
-        
-        for batch_ix in batch_ixs:
-            X_batch = X[batch_ix, ...]
-            y_batch = y[batch_ix, ...]
-            loss, params = self.train_step(params, opt_step, X_batch, y_batch)
-        
-        return params, opt_step
-
 
     def train_model_config(self, key, X_train, y_train, config, tx, num_epochs):
+
         """
         Train a flax.linen model by transforming the data according to
         process_config.
@@ -94,3 +60,36 @@ class TrainingConfig:
         print(f"@{radius=:0.4f}, {final_train_acc=:0.4f}")
         
         return params, final_train_acc
+
+    @jax.jit
+    def train_step(params, opt_state, X_batch, y_batch):
+        loss_fn = self.loss_generator(self.model, X_batch, y_batch)
+        loss_grad_fn = jax.value_and_grad(loss_fn)
+        loss_val, grads = loss_grad_fn(params)
+        updates, opt_state = tx.update(grads, opt_state)
+        params = optax.apply_updates(params, updates)
+
+        return loss_val, params
+
+    def get_batch_train_ixs(self, key, num_samples, batch_size):
+        """
+        Obtain the training indices to be used in an epoch of
+        mini-batch optimisation.
+        """
+        steps_per_epoch = num_samples // batch_size
+        batch_ixs = jax.random.permutation(key, num_samples)
+        batch_ixs = batch_ixs[:steps_per_epoch * batch_size]
+        batch_ixs = batch_ixs.reshape(steps_per_epoch, batch_size)
+        
+        return batch_ixs
+
+    def train_epoch(self, key, params, opt_step, X, y, batch_size, epoch):
+        num_samples, *_ = X.shape
+        batch_ixs = self.get_batch_train_ixs(key, num_samples, batch_size)
+        
+        for batch_ix in batch_ixs:
+            X_batch = X[batch_ix, ...]
+            y_batch = y[batch_ix, ...]
+            loss, params = self.train_step(params, opt_step, X_batch, y_batch)
+        
+        return params, opt_step
