@@ -82,7 +82,6 @@ class BlurRad:
         images_out = np.stack(images_out, axis=0)
         return images_out
 
-
 def blur_multiple(radii, img_dataset):
     """
     Blur every element of `img_dataset` given an element
@@ -149,7 +148,7 @@ def proc_dataset_multiple(radii, img_dataset, n_processes=90):
         elements = zip(radii_split, dataset_proc)
         dataset_proc = pool.starmap(blur_multiple, elements)
         dataset_proc = np.concatenate(dataset_proc, axis=0)
-    pool.terminate()
-    pool.join()
+    # pool.terminate()
+    # pool.join()
 
     return dataset_proc
