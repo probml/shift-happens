@@ -15,10 +15,10 @@ class Factory:
     def __init__(self, processor):
         self.processor = processor
     
-    def __call__(self, img, **kwargs):
-        return self.process_multiple_multiprocessing(img, kwargs)
+    def __call__(self, img, configs, n_processes=90):
+        return self.process_multiple_multiprocessing(img, configs, n_processes)
 
-    def process_single(self, X, **kwargs):
+    def process_single(self, X, *args, **kwargs):
         """
         Process a single element.
 
@@ -29,7 +29,7 @@ class Factory:
         kwargs: dict/params
             Processor's configuration parameters
         """
-        return self.processor(X, **kwargs)
+        return self.processor(X, *args, **kwargs)
 
     def process_multiple(self, X_batch, configurations):
         """
@@ -47,7 +47,7 @@ class Factory:
         X_out = np.stack(X_out, axis=0)
         return X_out
     
-    def process_multiple_multiprocessing(self, X_dataset, configurations, n_processes=90):
+    def process_multiple_multiprocessing(self, X_dataset, configurations, n_processes):
         """
         Process elements in a numpy array in parallel.
 
