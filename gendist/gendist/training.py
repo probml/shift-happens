@@ -5,10 +5,48 @@ from functools import partial
 
 
 def make_cross_entropy_loss_func(model, X, y):
+    """
+    Make a loss function for a multi-output classifier, i.e.,
+    model: R^M -> (y1, y2, ..., yK) = y_hat; where y_hat is a
+    probability distribution over K classes
+
+    Make a loss function for a multi-output model, i.e.,
+    model: R^M -> R^K
+
+    Parameters
+    ----------
+    model: Flax model
+        Flax model that takes X and returns y_hat
+    X: array(N, ...)
+        N samples of arbitrary shape
+    y: array(N, K)
+        N samples of K-dimensional outputs
+    """
     def loss_fn(params):
         y_hat = model.apply(params, X)
         loss = optax.softmax_cross_entropy(y_hat, y).mean()
         return loss
+    return loss_fn
+
+
+def make_multi_output_loss_func(model, X, y):
+    """
+    Make a loss function for a multi-output model, i.e.,
+    model: R^M -> R^K
+
+    Parameters
+    ----------
+    model: Flax model
+        Flax model that takes X and returns y_hat
+    X: array(N, ...)
+        N samples of arbitrary shape
+    y: array(N, K)
+        N samples of K-dimensional outputs
+    """
+    def loss_fn(params):
+        y_hat = model.apply(params, X)
+        loss = jnp.linalg.norm(y - y_hat, axis=-1) ** 2
+        return loss.mean()
     return loss_fn
 
 
