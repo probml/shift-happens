@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from functools import partial
 
 
-def make_loss_func(model, X, y):
+def make_cross_entropy_loss_func(model, X, y):
     def loss_fn(params):
         y_hat = model.apply(params, X)
         loss = optax.softmax_cross_entropy(y_hat, y).mean()
@@ -13,6 +13,10 @@ def make_loss_func(model, X, y):
 
 
 class TrainingConfig:
+    """
+    Class to train a neural network model that transforms the input data
+    given a processor function.
+    """
     def __init__(self, model, processor, loss_generator, tx):
         self.model = model
         self.processor = processor
