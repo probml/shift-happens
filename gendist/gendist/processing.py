@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from multiprocessing import Pool
 from augly import image 
 
+# DataAugmentationFactory
 class Factory:
     """
     This is a base library to process / transform the elements of a numpy
@@ -72,6 +73,7 @@ class Factory:
         with Pool(processes=n_processes) as pool:    
             dataset_proc = pool.starmap(self.process_multiple, elements)
             dataset_proc = np.concatenate(dataset_proc, axis=0)
+        pool.join()
 
         return dataset_proc.reshape(num_elements, -1)
 
