@@ -50,7 +50,7 @@ def make_multi_output_loss_func(model, X, y):
         return loss.mean()
     return loss_fn
 
-
+# TrainingBase
 class TrainingConfig:
     """
     Class to train a neural network model that transforms the input data
@@ -134,7 +134,7 @@ class TrainingConfig:
         
         return params, opt_step
 
-
+# TrainingMeta
 class TrainingShift:
     def __init__(self, model, processor, loss_generator, tx):
         """
@@ -189,7 +189,7 @@ class TrainingShift:
         
         return loss_val, params
     
-
+    
     def train_epoch(self, key, params, opt_step, X, y, configs, batch_size, epoch, logger, n_processes=90):
         """
         Training epoch for the projected weights. Note that target weights are the
@@ -214,14 +214,14 @@ class TrainingShift:
         logger.info(f"@{epoch=} | {loss=:0.4f}")
         return loss, params, opt_step
 
-    def train(self, key, X_train, target_values, configurations, batch_size, num_epochs, logger):
+    def train(self, key, X_train, target_values, configurations, batch_size, num_epochs, logger, params=None):
         num_samples, *obs_size = X_train.shape
         losses = []
         key_init, key_updates = jax.random.split(key)
         key_updates = jax.random.split(key_updates, num_epochs)
 
         batch = jnp.ones((1, jnp.prod(jnp.asarray(obs_size))))
-        params = self.model.init(key, batch)
+        params = self.model.init(key, batch) if params is None else params
         opt_state = self.tx.init(params)
         for epoch, key in enumerate(key_updates):
             loss, params, opt_state = self.train_epoch(key, params, opt_state, X_train, target_values,
