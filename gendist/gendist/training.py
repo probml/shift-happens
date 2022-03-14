@@ -84,7 +84,7 @@ class TrainingConfig:
         num_epochs: int
             Number of epochs to train the model.
         """
-        X_train_proc = self.processor(X_train, **config)
+        X_train_proc = self.processor(X_train, config)
         _, *input_shape = X_train_proc.shape
 
         batch = jnp.ones((1, *input_shape))
