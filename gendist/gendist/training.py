@@ -91,15 +91,18 @@ class TrainingConfig:
         params = self.model.init(key, batch)
         optimiser_state = self.tx.init(params)
 
+        losses = []
         for e in range(num_epochs):
             print(f"@epoch {e+1:03}", end="\r")
             _, key = jax.random.split(key)
-            params, opt_state = self.train_epoch(key, params, optimiser_state,
+            params, optimiser_state, avg_loss = self.train_epoch(key, params, optimiser_state,
                                                  X_train_proc, y_train, batch_size, e)
+            losses.append(avg_loss)
 
         final_train_acc = (y_train.argmax(axis=1) == self.model.apply(params, X_train_proc).argmax(axis=1)).mean().item()
         
-        return params, final_train_acc
+        losses = jnp.array(losses)
+        return params, final_train_acc, losses
 
     @partial(jax.jit, static_argnums=(0,))
     def train_step(self, params, opt_state, X_batch, y_batch):
@@ -109,7 +112,7 @@ class TrainingConfig:
         updates, opt_state = self.tx.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
 
-        return loss_val, params
+        return loss_val, params, opt_state
 
     def get_batch_train_ixs(self, key, num_samples, batch_size):
         """
@@ -127,12 +130,15 @@ class TrainingConfig:
         num_samples, *_ = X.shape
         batch_ixs = self.get_batch_train_ixs(key, num_samples, batch_size)
         
+        epoch_loss = 0.0
         for batch_ix in batch_ixs:
             X_batch = X[batch_ix, ...]
             y_batch = y[batch_ix, ...]
-            loss, params = self.train_step(params, opt_step, X_batch, y_batch)
+            loss, params, opt_step = self.train_step(params, opt_step, X_batch, y_batch)
+            epoch_loss += loss
         
-        return params, opt_step
+        epoch_loss = epoch_loss / len(batch_ixs)
+        return params, opt_step, epoch_loss
 
 # TrainingMeta
 class TrainingShift:
