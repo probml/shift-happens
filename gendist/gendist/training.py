@@ -50,8 +50,7 @@ def make_multi_output_loss_func(model, X, y):
         return loss.mean()
     return loss_fn
 
-# TrainingBase
-class TrainingConfig:
+class TrainingBase:
     """
     Class to train a neural network model that transforms the input data
     given a processor function.
@@ -62,8 +61,7 @@ class TrainingConfig:
         self.loss_generator = loss_generator
         self.tx = tx
 
-    def train_model_config(self, key, X_train, y_train, config, num_epochs, batch_size):
-
+    def fit(self, key, X_train, y_train, config, num_epochs, batch_size):
         """
         Train a flax.linen model by transforming the data according to
         process_config.
@@ -139,6 +137,55 @@ class TrainingConfig:
         
         epoch_loss = epoch_loss / len(batch_ixs)
         return params, opt_step, epoch_loss
+
+
+class TrainingSnapshot(TrainingBase):
+    def __init__(self, model, processor, loss_generator, tx, snapshot_interval):
+        super().__init__(model, processor, loss_generator, tx)
+        self.snapshot_interval = snapshot_interval
+
+    def fit(self, key, X_train, y_train, config, num_epochs, batch_size):
+        """
+        Train a flax.linen model by transforming the data according to
+        process_config.
+
+        Parameters
+        ----------
+        key: jax.random.PRNGKey
+            Random number generator key.
+        model: flax.nn.Module
+            Model to train.
+        X_train: jnp.array(N, ...)
+            Training data.
+        y_train: jnp.array(N)
+            Training target values
+        config: dict
+            Dictionary containing the training configuration to be passed to
+            the processor.
+        num_epochs: int
+            Number of epochs to train the model.
+        """
+        X_train_proc = self.processor(X_train, config)
+        _, *input_shape = X_train_proc.shape
+
+        batch = jnp.ones((1, *input_shape))
+        params = self.model.init(key, batch)
+        optimiser_state = self.tx.init(params)
+
+        losses = []
+        params_hist = []
+        for e in range(num_epochs):
+            print(f"@epoch {e+1:03}", end="\r")
+            _, key = jax.random.split(key)
+            params, optimiser_state, avg_loss = self.train_epoch(key, params, optimiser_state,
+                                                 X_train_proc, y_train, batch_size, e)
+            losses.append(avg_loss)
+            if (e+1) % self.snapshot_interval == 0:
+                params_hist.append(params)
+
+        losses = jnp.array(losses)
+        return params, losses, params_hist
+
 
 # TrainingMeta
 class TrainingShift:
