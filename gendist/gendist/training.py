@@ -140,6 +140,11 @@ class TrainingBase:
 
 
 class TrainingSnapshot(TrainingBase):
+    """
+    Extension of Training base class that saves the model parameters
+    every snapshot_interval epochs. For this class, it is better to consider
+    an optimiser that fluctuates the learning rate.
+    """
     def __init__(self, model, processor, loss_generator, tx, snapshot_interval):
         super().__init__(model, processor, loss_generator, tx)
         self.snapshot_interval = snapshot_interval
@@ -177,15 +182,95 @@ class TrainingSnapshot(TrainingBase):
         for e in range(num_epochs):
             print(f"@epoch {e+1:03}", end="\r")
             _, key = jax.random.split(key)
-            params, optimiser_state, avg_loss = self.train_epoch(key, params, optimiser_state,
-                                                 X_train_proc, y_train, batch_size, e)
-            losses.append(avg_loss)
+
             if (e+1) % self.snapshot_interval == 0:
                 params_hist.append(params)
 
-        losses = jnp.array(losses)
-        return params, losses, params_hist
+            params, optimiser_state, avg_loss = self.train_epoch(key, params, optimiser_state,
+                                                 X_train_proc, y_train, batch_size, e)
+            losses.append(avg_loss)
 
+        losses = jnp.array(losses)
+        return params_hist, losses
+
+
+class TrainingMeta(TrainingBase):
+    """
+    Training class of model parameters. We consider an input of the form NxMx..., and a target
+    variable of the form KxMxW, wher
+    * N: number of observations
+    * M: number of transformations per observation
+    * ...: Dimension specification of a single instance
+    * K: number of samples per configuration. 
+    * W: number of parameters per configuration
+    """
+    def __init__(self, model, loss_generator, tx):
+        super().__init__(model, lambda x, _: x, loss_generator, tx)
+
+    def fit(self, key, X_train, y_train, config, num_epochs, batch_size):
+        """
+        Train a flax.linen model by transforming the data according to
+        process_config.
+
+        Parameters
+        ----------
+        key: jax.random.PRNGKey
+            Random number generator key.
+        model: flax.nn.Module
+            Model to train.
+        X_train: jnp.array(N, ...)
+            Training data.
+        y_train: jnp.array(N)
+            Training target values
+        config: dict
+            Dictionary containing the training configuration to be passed to
+            the processor.
+        num_epochs: int
+            Number of epochs to train the model.
+        """
+        X_train_proc = self.processor(X_train, config)
+        _, *input_shape = X_train_proc.shape
+
+        batch = jnp.ones((1, *input_shape))
+        params = self.model.init(key, batch)
+        optimiser_state = self.tx.init(params)
+
+        losses = []
+        for e in range(num_epochs):
+            print(f"@epoch {e+1:03}", end="\r")
+            _, key = jax.random.split(key)
+            params, optimiser_state, avg_loss = self.train_epoch(key, params, optimiser_state,
+                                                 X_train_proc, y_train, batch_size, e)
+            losses.append(avg_loss)
+
+        
+        training_output = {
+            "params": params,
+            "losses": jnp.array(losses),
+        }
+        return training_output
+
+    
+    def train_epoch(self, key, params, opt_step, X, y, batch_size, epoch):
+        """
+        Train an model considering an input of the form NxMx..., and a target
+        variable of the form KxMxW.
+        """
+        num_samples, num_configs, *_ = X.shape
+        num_cycles, num_configs, _ = y.shape
+        num_elements = num_samples * num_configs * num_cycles
+        
+        batch_ixs = self.get_batch_train_ixs(key, num_elements, batch_size)
+        
+        epoch_loss = 0.0
+        for batch_ix in batch_ixs:
+            X_batch = X[batch_ix % num_samples, batch_ix // (num_samples * num_cycles), ...]
+            y_batch = y[(batch_ix // num_samples) % num_cycles, batch_ix // (num_samples * num_cycles), ...]
+            loss, params, opt_step = self.train_step(params, opt_step, X_batch, y_batch)
+            epoch_loss += loss
+        
+        epoch_loss = epoch_loss / len(batch_ixs)
+        return params, opt_step, epoch_loss
 
 # TrainingMeta
 class TrainingShift:
