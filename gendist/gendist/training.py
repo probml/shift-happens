@@ -207,7 +207,7 @@ class TrainingMeta(TrainingBase):
     def __init__(self, model, loss_generator, tx):
         super().__init__(model, lambda x, _: x, loss_generator, tx)
 
-    def fit(self, key, X_train, y_train, config, num_epochs, batch_size):
+    def fit(self, key, X_train, y_train, num_epochs, batch_size):
         """
         Train a flax.linen model by transforming the data according to
         process_config.
@@ -228,11 +228,11 @@ class TrainingMeta(TrainingBase):
         num_epochs: int
             Number of epochs to train the model.
         """
-        X_train_proc = self.processor(X_train, config)
-        _, *input_shape = X_train_proc.shape
+        _, *input_shape = X_train.shape
 
+        key, key_params = jax.random.split(key)
         batch = jnp.ones((1, *input_shape))
-        params = self.model.init(key, batch)
+        params = self.model.init(key_params, batch)
         optimiser_state = self.tx.init(params)
 
         losses = []
@@ -240,10 +240,9 @@ class TrainingMeta(TrainingBase):
             print(f"@epoch {e+1:03}", end="\r")
             _, key = jax.random.split(key)
             params, optimiser_state, avg_loss = self.train_epoch(key, params, optimiser_state,
-                                                 X_train_proc, y_train, batch_size, e)
+                                                 X_train, y_train, batch_size, e)
             losses.append(avg_loss)
 
-        
         training_output = {
             "params": params,
             "losses": jnp.array(losses),
@@ -272,7 +271,6 @@ class TrainingMeta(TrainingBase):
         epoch_loss = epoch_loss / len(batch_ixs)
         return params, opt_step, epoch_loss
 
-# TrainingMeta
 class TrainingShift:
     def __init__(self, model, processor, loss_generator, tx):
         """
