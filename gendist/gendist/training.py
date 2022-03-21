@@ -99,8 +99,12 @@ class TrainingBase:
 
         final_train_acc = (y_train.argmax(axis=1) == self.model.apply(params, X_train_proc).argmax(axis=1)).mean().item()
         
-        losses = jnp.array(losses)
-        return params, final_train_acc, losses
+        training_output = {
+            "losses": jnp.array(losses),
+            "train_accuracy": final_train_acc,
+            "params": params,
+        }
+        return training_output
 
     @partial(jax.jit, static_argnums=(0,))
     def train_step(self, params, opt_state, X_batch, y_batch):
@@ -149,7 +153,7 @@ class TrainingSnapshot(TrainingBase):
         super().__init__(model, processor, loss_generator, tx)
         self.snapshot_interval = snapshot_interval
 
-    def fit(self, key, X_train, y_train, config, num_epochs, batch_size):
+    def fit(self, key, X_train, y_train, config, num_epochs, batch_size, evalfn=None):
         """
         Train a flax.linen model by transforming the data according to
         process_config.
@@ -179,19 +183,32 @@ class TrainingSnapshot(TrainingBase):
 
         losses = []
         params_hist = []
+        metrics_hist = []
         for e in range(num_epochs):
             print(f"@epoch {e+1:03}", end="\r")
             _, key = jax.random.split(key)
 
+            # Store the parameters and evaluate the model on
+            # the train set
             if (e+1) % self.snapshot_interval == 0:
                 params_hist.append(params)
+                if evalfn is not None:
+                    yhat = self.model.apply(params, X_train_proc)
+                    metric = evalfn(y_train, yhat)
+                    metrics_hist.append(metric)
+
 
             params, optimiser_state, avg_loss = self.train_epoch(key, params, optimiser_state,
                                                  X_train_proc, y_train, batch_size, e)
             losses.append(avg_loss)
 
-        losses = jnp.array(losses)
-        return params_hist, losses
+        training_output = {
+            "params": params_hist,
+            "losses": jnp.array(losses),
+            "metrics": metrics_hist,
+        }
+
+        return training_output
 
 
 class TrainingMeta(TrainingBase):
@@ -247,6 +264,7 @@ class TrainingMeta(TrainingBase):
             "params": params,
             "losses": jnp.array(losses),
         }
+
         return training_output
 
     
@@ -255,8 +273,11 @@ class TrainingMeta(TrainingBase):
         Train an model considering an input of the form NxMx..., and a target
         variable of the form KxMxW.
         """
-        num_samples, num_configs, *_ = X.shape
-        num_cycles, num_configs, _ = y.shape
+        num_samples, num_configs_X, *_ = X.shape
+        num_cycles, num_configs_y, _ = y.shape
+        if num_configs_X != num_configs_y:
+            raise ValueError("The number of configurations in X and y must be the same.")
+        num_configs = num_configs_X
         num_elements = num_samples * num_configs * num_cycles
         
         batch_ixs = self.get_batch_train_ixs(key, num_elements, batch_size)
@@ -270,6 +291,7 @@ class TrainingMeta(TrainingBase):
         
         epoch_loss = epoch_loss / len(batch_ixs)
         return params, opt_step, epoch_loss
+
 
 class TrainingShift:
     def __init__(self, model, processor, loss_generator, tx):
