@@ -3,6 +3,7 @@ import optax
 import jax.numpy as jnp
 import numpy as np
 from functools import partial
+from tqdm.auto import tqdm
 
 
 def make_cross_entropy_loss_func(model, X, y):
@@ -61,7 +62,7 @@ class TrainingBase:
         self.loss_generator = loss_generator
         self.tx = tx
 
-    def fit(self, key, X_train, y_train, config, num_epochs, batch_size):
+    def fit(self, key, X_train, y_train, config, num_epochs, batch_size, evalfn=None):
         """
         Train a flax.linen model by transforming the data according to
         process_config.
@@ -90,20 +91,22 @@ class TrainingBase:
         optimiser_state = self.tx.init(params)
 
         losses = []
-        for e in range(num_epochs):
-            print(f"@epoch {e+1:03}", end="\r")
+        for e in tqdm(range(num_epochs), leave=False):
             _, key = jax.random.split(key)
             params, optimiser_state, avg_loss = self.train_epoch(key, params, optimiser_state,
                                                  X_train_proc, y_train, batch_size, e)
             losses.append(avg_loss)
 
-        final_train_acc = (y_train.argmax(axis=1) == self.model.apply(params, X_train_proc).argmax(axis=1)).mean().item()
-        
+        if evalfn is not None:
+            yhat = self.model.apply(params, X_train_proc)
+            metric = evalfn(y_train, yhat)
+
         training_output = {
             "losses": jnp.array(losses),
-            "train_accuracy": final_train_acc,
+            "metric": metric,
             "params": params,
         }
+
         return training_output
 
     @partial(jax.jit, static_argnums=(0,))
@@ -184,8 +187,7 @@ class TrainingSnapshot(TrainingBase):
         losses = []
         params_hist = []
         metrics_hist = []
-        for e in range(num_epochs):
-            print(f"@epoch {e+1:03}", end="\r")
+        for e in tqdm(range(num_epochs), leave=False):
             _, key = jax.random.split(key)
 
             # Store the parameters and evaluate the model on
@@ -224,7 +226,7 @@ class TrainingMeta(TrainingBase):
     def __init__(self, model, loss_generator, tx):
         super().__init__(model, lambda x, _: x, loss_generator, tx)
 
-    def fit(self, key, X_train, y_train, num_epochs, batch_size):
+    def fit(self, key, X_train, y_train, num_epochs, batch_size, leave_pb=True):
         """
         Train a flax.linen model by transforming the data according to
         process_config.
@@ -239,11 +241,12 @@ class TrainingMeta(TrainingBase):
             Training data.
         y_train: jnp.array(N)
             Training target values
-        config: dict
-            Dictionary containing the training configuration to be passed to
-            the processor.
         num_epochs: int
             Number of epochs to train the model.
+        batch_size: int
+            Number of samples per batch.
+        leave_pb: bool
+            If True, the progress bar is left open.
         """
         _, *input_shape = X_train.shape
 
@@ -253,11 +256,11 @@ class TrainingMeta(TrainingBase):
         optimiser_state = self.tx.init(params)
 
         losses = []
-        for e in range(num_epochs):
+        for e in tqdm(range(num_epochs), leave=leave_pb):
             print(f"@epoch {e+1:03}", end="\r")
             _, key = jax.random.split(key)
             params, optimiser_state, avg_loss = self.train_epoch(key, params, optimiser_state,
-                                                 X_train, y_train, batch_size, e)
+                                                                 X_train, y_train, batch_size, e)
             losses.append(avg_loss)
 
         training_output = {
