@@ -62,8 +62,9 @@ if __name__ == "__main__":
     trainer = gendist.training.TrainingMeta(weights_model, lossfn, tx)
 
     meta_output = trainer.fit(key, X_train, projected_params, n_epochs, batch_size)
+    meta_output["projection_model"] = pca
 
     filename_meta_model = "meta-model.pkl"
-    filename_meta_model = os.path.jon(experiment_path, filename_meta_model)
+    filename_meta_model = os.path.join(experiment_path, filename_meta_model)
     with open(filename_meta_model, "wb") as f:
         pickle.dump(meta_output, f)
