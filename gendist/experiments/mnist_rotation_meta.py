@@ -22,6 +22,7 @@ def processor(X, angle):
 if __name__ == "__main__":
     import sys
     _, filename_data_model = sys.argv
+    experiment_path, _ = os.path.split(filename_data_model)
 
     with open(filename_data_model, "rb") as f:
         data_model_config = pickle.load(f)
@@ -39,16 +40,17 @@ if __name__ == "__main__":
     n_components = 60
     n_classes = 10
     n_train_subset = 6_000
-    n_train, *_ = X_train.shape
+    n_train, *elem_dims = X_train.shape
     n_configs = len(list_params)
 
     pca = PCA(n_components=n_components)
     projected_params = pca.fit_transform(target_params)[None, ...]
 
+    imap = np.ones((n_configs, 1, *elem_dims))
     configs_transform = np.repeat(configs, n_train_subset)
     subset_ix = jax.random.choice(key_subset, n_train, (n_train_subset,), replace=False).to_py()
-    X_train = X_train[subset_ix, ...]
-    X_train = processing_class(X_train, configs_transform)
+    X_train = X_train[subset_ix, ...] * imap
+    X_train = processing_class(X_train.reshape(-1, *elem_dims), configs_transform)
     X_train = X_train.reshape((n_train_subset, n_configs, -1), order="F")
 
     alpha = 0.01
@@ -59,7 +61,9 @@ if __name__ == "__main__":
     weights_model = gendist.models.MLPWeightsV1(n_components)
     trainer = gendist.training.TrainingMeta(weights_model, lossfn, tx)
 
-    meta_output = trainer.fit(key, X, projected_params, configs, n_epochs, batch_size)
+    meta_output = trainer.fit(key, X_train, projected_params, n_epochs, batch_size)
 
-    with open("meta-model-result.pkl", "wb") as f:
+    filename_meta_model = "meta-model.pkl"
+    filename_meta_model = os.path.jon(experiment_path, filename_meta_model)
+    with open(filename_meta_model, "wb") as f:
         pickle.dump(meta_output, f)
