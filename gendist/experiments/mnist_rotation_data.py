@@ -8,7 +8,7 @@ import numpy as np
 from augly import image
 from datetime import datetime
 from tqdm import tqdm
-
+from loguru import logger
 
 def eval_acc(y, yhat):
     return (y.argmax(axis=1) == yhat.argmax(axis=1)).mean().item()
@@ -35,7 +35,7 @@ def create_experiment_path(base_path, experiment_name):
     return base_path
 
 
-def training_loop(X, y, configs, trainer, n_epochs, batch_size, evalfn):
+def training_loop(key, X, y, configs, trainer, n_epochs, batch_size, evalfn, logger):
     """
     Train a collection of models with different configurations
 
@@ -71,6 +71,9 @@ def training_loop(X, y, configs, trainer, n_epochs, batch_size, evalfn):
         configs_params.append(train_output["params"])
         configs_losses.append(train_output["losses"])
         configs_metric.append(train_output["metric"])
+
+        name, value = config.popitem()
+        logger.info(f"{name}={value:0.3f} | {train_output['metric']:.4f}")
     
     output = {
         "params": configs_params,
@@ -81,12 +84,15 @@ def training_loop(X, y, configs, trainer, n_epochs, batch_size, evalfn):
     return output
     
 
-def main(base_path, trainer, X, y, configs, n_epochs, batch_size, evalfn):
+def main(key, base_path, trainer, X, y, configs, n_epochs, batch_size, evalfn):
     filename = "data-model-result.pkl"
     date_str = datetime.now().strftime("%y%m%d%H%M")
     experiment_path = create_experiment_path(base_path, date_str)
+    logs_path = os.path.join(experiment_path, "logs")
+    logs_path = os.path.join(logs_path, "log-bottom.log")
+    logger.add(logs_path, rotation="5mb")
 
-    experiment_results = training_loop(X, y, configs, trainer, n_epochs, batch_size, evalfn)
+    experiment_results = training_loop(key, X, y, configs, trainer, n_epochs, batch_size, evalfn, logger)
     experiment_results["configs"] = configs
 
     filename = os.path.join(experiment_path, "output", filename)
@@ -96,15 +102,15 @@ def main(base_path, trainer, X, y, configs, n_epochs, batch_size, evalfn):
     print(f"Experiment path: {experiment_path}")
 
 
-
 if __name__ == "__main__":
-    key = jax.random.PRNGKey(314)
+    logger.remove() # avoid output to terminal
     n_configs, n_classes = 150, 10
     batch_size = 2000
     n_epochs = 50
     alpha = 0.001
     tx = optax.adam(learning_rate=alpha)
-    model = gendist.models.MLPDataV1(num_outputs=10)
+    # model = gendist.models.MLPDataV1(num_outputs=10)
+    model = gendist.models.LeNet5(10)
     processing_class = gendist.processing.Factory(processor)
     loss = gendist.training.make_cross_entropy_loss_func
     trainer = gendist.training.TrainingBase(model, processing_class, loss, tx)
@@ -118,4 +124,5 @@ if __name__ == "__main__":
     configs = [{"angle": angle.item()} for angle in degrees]
 
     path = "./outputs"
-    main(path, trainer, X_train, y_train_ohe, configs, n_epochs, batch_size, eval_acc)
+    key = jax.random.PRNGKey(314)
+    main(key, path, trainer, X_train, y_train_ohe, configs, n_epochs, batch_size, eval_acc)
