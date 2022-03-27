@@ -29,8 +29,10 @@ def create_experiment_path(base_path, experiment_name):
     path_output = os.path.join(base_path, "output")
     path_logs = os.path.join(base_path, "logs")
 
-    os.makedirs(path_output)
-    os.makedirs(path_logs)
+    if not os.path.exists(path_output):
+        os.makedirs(path_output)
+    if not os.path.exists(path_logs):
+        os.makedirs(path_logs)
 
     return base_path
 
@@ -84,12 +86,17 @@ def training_loop(key, X, y, configs, trainer, n_epochs, batch_size, evalfn, log
     return output
     
 
-def main(key, base_path, trainer, X, y, configs, n_epochs, batch_size, evalfn):
-    filename = "data-model-result.pkl"
-    date_str = datetime.now().strftime("%y%m%d%H%M")
-    experiment_path = create_experiment_path(base_path, date_str)
+def main(key, base_path, trainer, X, y, configs, n_epochs, batch_size, evalfn,
+         experiment_path=None, logname=None, filename=None):
+    filename = "data-model-result.pkl" if filename is None else filename
+    logname = "log-data.log" if logname is None else logname
+
+    if experiment_path is None:
+        date_str = datetime.now().strftime("%y%m%d%H%M")
+        experiment_path = create_experiment_path(base_path, date_str)
+
     logs_path = os.path.join(experiment_path, "logs")
-    logs_path = os.path.join(logs_path, "log-bottom.log")
+    logs_path = os.path.join(logs_path, logname)
     logger.add(logs_path, rotation="5mb")
 
     experiment_results = training_loop(key, X, y, configs, trainer, n_epochs, batch_size, evalfn, logger)
@@ -110,7 +117,7 @@ if __name__ == "__main__":
     alpha = 0.001
     tx = optax.adam(learning_rate=alpha)
     # model = gendist.models.MLPDataV1(num_outputs=10)
-    model = gendist.models.LeNet5(10)
+    model = gendist.models.LeNet5(n_classes)
     processing_class = gendist.processing.Factory(processor)
     loss = gendist.training.make_cross_entropy_loss_func
     trainer = gendist.training.TrainingBase(model, processing_class, loss, tx)
@@ -123,6 +130,6 @@ if __name__ == "__main__":
     degrees = np.linspace(0, 360, n_configs)
     configs = [{"angle": angle.item()} for angle in degrees]
 
-    path = "./outputs"
+    base_path = "./outputs"
     key = jax.random.PRNGKey(314)
-    main(key, path, trainer, X_train, y_train_ohe, configs, n_epochs, batch_size, eval_acc)
+    main(key, base_path, trainer, X_train, y_train_ohe, configs, n_epochs, batch_size, eval_acc)
