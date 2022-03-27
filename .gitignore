@@ -1,7 +1,8 @@
 *~
 scripts/.DS_Store
 .DS_Store
-notebooks/MNIST/
+MNIST
+outputs
 
 *.mp4
 *.png
