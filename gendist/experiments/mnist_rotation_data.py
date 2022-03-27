@@ -92,8 +92,8 @@ def main(key, base_path, trainer, X, y, configs, n_epochs, batch_size, evalfn,
     logname = "log-data.log" if logname is None else logname
 
     if experiment_path is None:
-        date_str = datetime.now().strftime("%y%m%d%H%M")
-        experiment_path = create_experiment_path(base_path, date_str)
+        experiment_path = datetime.now().strftime("%y%m%d%H%M")
+    experiment_path = create_experiment_path(base_path, experiment_path)
 
     logs_path = os.path.join(experiment_path, "logs")
     logs_path = os.path.join(logs_path, logname)
