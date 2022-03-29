@@ -37,7 +37,7 @@ def create_experiment_path(base_path, experiment_name):
     return base_path
 
 
-def training_loop(key, X, y, configs, trainer, n_epochs, batch_size, evalfn, logger):
+def training_loop(key, X, y, configs, trainer, n_epochs, batch_size, evalfn, logger, leave=True):
     """
     Train a collection of models with different configurations
 
@@ -68,13 +68,14 @@ def training_loop(key, X, y, configs, trainer, n_epochs, batch_size, evalfn, log
     configs_losses = []
     configs_metric = []
 
-    for config in tqdm(configs):
+    keys = jax.random.split(key, len(configs))
+    for key, config in tqdm(zip(keys, configs), leave=leave): # Remove zip for key
         train_output = trainer.fit(key, X, y, config, n_epochs, batch_size, evalfn)
         configs_params.append(train_output["params"])
         configs_losses.append(train_output["losses"])
         configs_metric.append(train_output["metric"])
 
-        name, value = config.popitem()
+        name, value = config.copy().popitem()
         logger.info(f"{name}={value:0.3f} | {train_output['metric']:.4f}")
     
     output = {
@@ -87,7 +88,7 @@ def training_loop(key, X, y, configs, trainer, n_epochs, batch_size, evalfn, log
     
 
 def main(key, base_path, trainer, X, y, configs, n_epochs, batch_size, evalfn,
-         experiment_path=None, logname=None, filename=None):
+         experiment_path=None, logname=None, filename=None, leave=True):
     filename = "data-model-result.pkl" if filename is None else filename
     logname = "log-data.log" if logname is None else logname
 
@@ -99,18 +100,15 @@ def main(key, base_path, trainer, X, y, configs, n_epochs, batch_size, evalfn,
     logs_path = os.path.join(logs_path, logname)
     logger.add(logs_path, rotation="5mb")
 
-    experiment_results = training_loop(key, X, y, configs, trainer, n_epochs, batch_size, evalfn, logger)
+    experiment_results = training_loop(key, X, y, configs, trainer, n_epochs, batch_size, evalfn, logger, leave=leave)
     experiment_results["configs"] = configs
 
     filename = os.path.join(experiment_path, "output", filename)
     with open(filename, "wb") as f:
         pickle.dump(experiment_results, f)
 
-    print(f"Experiment path: {experiment_path}")
-
 
 if __name__ == "__main__":
-    logger.remove() # avoid output to terminal
     n_configs, n_classes = 150, 10
     batch_size = 2000
     n_epochs = 50
@@ -128,8 +126,15 @@ if __name__ == "__main__":
     y_train_ohe = jax.nn.one_hot(y_train, n_classes)
 
     degrees = np.linspace(0, 360, n_configs)
-    configs = [{"angle": angle.item()} for angle in degrees]
+    configs = [{"angle": float(angle)} for angle in degrees]
 
+    n_tests = 10
     base_path = "./outputs"
+    experiment_path = "cnn-rotation-v2"
     key = jax.random.PRNGKey(314)
-    main(key, base_path, trainer, X_train, y_train_ohe, configs, n_epochs, batch_size, eval_acc)
+    keys = jax.random.split(key, n_tests)
+    for it, key in tqdm(list(enumerate(keys))):
+        logger.remove() # avoid output to terminal
+        main(key, base_path, trainer, X_train, y_train_ohe, configs, n_epochs, batch_size, eval_acc,
+             experiment_path=experiment_path, logname=f"log-cnn-{it:02}.log", filename=f"cnn-{it:02}.pkl",
+             leave=False)
