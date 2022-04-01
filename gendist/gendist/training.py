@@ -86,7 +86,7 @@ class TrainingBase:
         X_train_proc = self.processor(X_train, config)
         _, *input_shape = X_train_proc.shape
 
-        batch = jnp.ones((1, *input_shape))
+        batch = jnp.ones((batch_size, *input_shape))
         params = self.model.init(key, batch)
         optimiser_state = self.tx.init(params)
 
@@ -100,6 +100,8 @@ class TrainingBase:
         if evalfn is not None:
             yhat = self.model.apply(params, X_train_proc)
             metric = evalfn(y_train, yhat)
+        else:
+            metric = None
 
         training_output = {
             "losses": jnp.array(losses),
@@ -180,7 +182,7 @@ class TrainingSnapshot(TrainingBase):
         X_train_proc = self.processor(X_train, config)
         _, *input_shape = X_train_proc.shape
 
-        batch = jnp.ones((1, *input_shape))
+        batch = jnp.ones((batch_size, *input_shape))
         params = self.model.init(key, batch)
         optimiser_state = self.tx.init(params)
 
@@ -251,7 +253,7 @@ class TrainingMeta(TrainingBase):
         _, *input_shape = X_train.shape
 
         key, key_params = jax.random.split(key)
-        batch = jnp.ones((1, *input_shape))
+        batch = jnp.ones((batch_size, *input_shape))
         params = self.model.init(key_params, batch)
         optimiser_state = self.tx.init(params)
 
